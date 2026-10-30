@@ -435,6 +435,18 @@ mainLoop:
 					if finishReason == chat.FinishReasonStop && len(toolCalls) > 0 {
 						finishReason = chat.FinishReasonToolCalls
 					}
+					// The token limit cut the turn while a call was streaming:
+					// its arguments are incomplete, and rerunning the turn hits
+					// the same limit. Retract the calls as for a refusal and end
+					// the turn as length.
+					if finishReason == chat.FinishReasonLength && len(toolCalls) > 0 {
+						slog.WarnContext(ctx, "Dropping tool calls from a turn cut off by the token limit",
+							"agent", a.Name(), "tool_calls", len(toolCalls))
+						events.Emit(ToolCallsRetracted(toolCallIDs(toolCalls), a.Name()))
+						toolCalls = nil
+						openAIResponse = nil
+						providerState = nil
+					}
 				}
 				return streamResult{
 					MessageID:         messageID,
